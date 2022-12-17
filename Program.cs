@@ -12,8 +12,8 @@ namespace SimulatedAnnealing
     const int rowColWeight = 1;
     const int diagWeight = 1;
     const int maxIterations = 2_000;
-    const double expFactor = 10;
-    const int numberOfExperiments = 4_000;
+    const double expFactor = 12;
+    const int maxNumberOfExperiments = 16_000;
 
     static readonly ImmutableArray<ImmutableArray<int>> preDefinedColumns = ImmutableArray.Create(
       ImmutableArray.Create(0, 16, 0, 0, 0),
@@ -40,18 +40,30 @@ namespace SimulatedAnnealing
 
       var sw = new Stopwatch();
       sw.Start();
-      var result = Enumerable.Range(1, numberOfExperiments)
-        .AsParallel()
-        .Select(_ => CreateRandomBoard())
-        .Select(Anneal)
-        .OrderBy(x => x.Score.Total).ToArray();
 
-      var perfectResults = result.Count(x => x.Score.Total == 0);
 
-      Console.WriteLine($"Number of perfect results: {perfectResults} ({perfectResults * 100m/numberOfExperiments}%)");
+      //Serial execution
+      // var result = Enumerable.Range(1, maxNumberOfExperiments)
+      //         .Select(_ => CreateRandomBoard())
+      //         .Select(Anneal)
+      //         .FirstOrDefault(r => r.Score.Total == 0);
 
-      Console.WriteLine("Best result:");
-      PrintResult(result.First());
+      //Parallel execution
+      Result? result = null;
+      Parallel.For(1, maxNumberOfExperiments, (i, loopState) =>
+      {
+          var b = CreateRandomBoard();
+          var r = Anneal(b);
+          if (r.Score.Total == 0)
+          {
+              result = r;
+              loopState.Stop();
+              Console.WriteLine($"Result found in iteration {i}");
+          }
+      });
+ 
+      Console.WriteLine("Result:");
+      PrintResult(result);
 
       Console.WriteLine($"Time taken: {sw.Elapsed}");
     }
@@ -140,24 +152,27 @@ namespace SimulatedAnnealing
         colPenalty * rowColWeight + rowPenalty * rowColWeight + diagDownPenalty * diagWeight + diagUpPenalty * diagWeight);
     }
 
-    static void PrintResult(params Result[] results)
+    static void PrintResult(params Result?[] results)
     {
       foreach (var result in results)
       {
-        var (bestBoard, bestscore, numberOfChanges) = result;
-        Console.WriteLine($"Solution with score: {bestscore.Total}");
-        Console.WriteLine($"Solution with column penalty: {bestscore.ColPenalty}");
-        Console.WriteLine($"Solution with row penalty: {bestscore.RowPenalty}");
-        Console.WriteLine($"Solution with diagonal up penalty: {bestscore.DiagUpPenalty}");
-        Console.WriteLine($"Solution with diagonal down penalty: {bestscore.DiagDownPenalty}");
-        Console.WriteLine($"Number of accepted changes: {numberOfChanges}");
-
-        foreach (var ser in bestBoard)
+        if (result.HasValue)
         {
-          Console.WriteLine($"{string.Join(",", ser)}");
-        }
+          var (bestBoard, bestscore, numberOfChanges) = result.Value;
+          Console.WriteLine($"Solution with score: {bestscore.Total}");
+          Console.WriteLine($"Solution with column penalty: {bestscore.ColPenalty}");
+          Console.WriteLine($"Solution with row penalty: {bestscore.RowPenalty}");
+          Console.WriteLine($"Solution with diagonal up penalty: {bestscore.DiagUpPenalty}");
+          Console.WriteLine($"Solution with diagonal down penalty: {bestscore.DiagDownPenalty}");
+          Console.WriteLine($"Number of accepted changes: {numberOfChanges}");
 
-        Console.WriteLine("********************************************");
+          foreach (var ser in bestBoard)
+          {
+            Console.WriteLine($"{string.Join(",", ser)}");
+          }
+
+          Console.WriteLine("********************************************");
+        }
       }
     }
 
